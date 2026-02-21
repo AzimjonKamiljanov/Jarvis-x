@@ -1,0 +1,35 @@
+# JARVIS-X Configuration File
+
+ai:
+  default_provider: groq
+  temperature: 0.7
+  max_tokens: 2048
+  model_preferences:
+    trivial: llama-3.1-8b-instant
+    simple: llama-3.1-8b-instant
+    moderate: llama-3.3-70b-versatile
+    complex: llama-3.3-70b-versatile
+
+memory:
+  short_term_limit: 20
+
+system:
+  language: uz  # uz | en
+  debug: false
+
+providers:
+  groq:
+    api_endpoint: https://api.groq.com/openai/v1
+    models:
+      - name: llama-3.3-70b-versatile
+        latency_ms: 800
+        quality_score: 0.95
+        offline_capable: false
+      - name: llama-3.1-8b-instant
+        latency_ms: 300
+        quality_score: 0.80
+        offline_capable: false
+      - name: mixtral-8x7b-32768
+        latency_ms: 600
+        quality_score: 0.88
+        offline_capable: false
