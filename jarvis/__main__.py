@@ -6,6 +6,8 @@ Usage:
     python -m jarvis --offline "Hi"
     python -m jarvis --model llama-3.1-8b-instant "Hello"
     python -m jarvis --config /path/to/config.yaml
+    python -m jarvis --voice            # voice assistant mode
+    python -m jarvis --voice-test       # test voice components
 """
 
 from __future__ import annotations
@@ -148,7 +150,36 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", metavar="PATH", help="Path to jarvis_config.yaml")
     parser.add_argument("--api", action="store_true", help="Start the FastAPI server")
     parser.add_argument("--stream", action="store_true", help="Stream responses in CLI mode")
+    parser.add_argument("--voice", action="store_true", help="Start voice assistant mode")
+    parser.add_argument(
+        "--voice-test", action="store_true", help="Test voice components (STT, TTS, mic)"
+    )
     return parser
+
+
+def _run_voice_test() -> None:
+    """Test each voice component and report status."""
+    from jarvis.voice.audio_stream import AudioStream
+    from jarvis.voice.stt_engine import STTEngine
+    from jarvis.voice.tts_engine import TTSEngine
+
+    stt = STTEngine()
+    tts = TTSEngine()
+    audio = AudioStream()
+
+    console.print("\n[bold cyan]Voice Component Status[/bold cyan]")
+    _ok = "[green]✅ available[/green]"
+    _no = "[red]❌ unavailable[/red]"
+    console.print(f"  STT (Vosk):      {_ok if stt.is_available() else _no}")
+    console.print(f"  TTS (pyttsx3):   {_ok if tts.is_available() else _no}")
+    console.print(f"  Microphone:      {_ok if audio.is_available() else _no}")
+
+    if not (stt.is_available() and tts.is_available() and audio.is_available()):
+        console.print(
+            "\n[yellow]To install voice dependencies:[/yellow]\n"
+            "  pip install 'jarvis-x[voice]'\n"
+            "  bash scripts/download_vosk_model.sh"
+        )
 
 
 def main() -> None:
@@ -169,8 +200,41 @@ def main() -> None:
         )
         return
 
+    if getattr(args, "voice_test", False):
+        _run_voice_test()
+        return
+
     config = load_config(args.config)
     orchestrator = JarvisOrchestrator(config=config)
+
+    if getattr(args, "voice", False):
+        from jarvis.voice.voice_assistant import VoiceAssistant
+
+        voice_cfg = config.get("voice", {}) if isinstance(config, dict) else {}
+
+        async def _run_voice() -> None:
+            await orchestrator.initialize()
+            assistant = VoiceAssistant(orchestrator=orchestrator, config=voice_cfg)
+            if not assistant.is_available():
+                status = assistant.get_status()
+                console.print("[red]Voice system is not fully available:[/red]")
+                for component, ok in status.items():
+                    icon = "[green]✅[/green]" if ok else "[red]❌[/red]"
+                    console.print(f"  {component}: {icon}")
+                console.print(
+                    "\n[yellow]Install voice dependencies:[/yellow]\n"
+                    "  pip install 'jarvis-x[voice]'\n"
+                    "  bash scripts/download_vosk_model.sh"
+                )
+                return
+            await assistant.run_voice_loop()
+
+        try:
+            asyncio.run(_run_voice())
+        except KeyboardInterrupt:
+            console.print("\n[dim]Interrupted. Goodbye![/dim]")
+            sys.exit(0)
+        return
 
     async def _run() -> None:
         await orchestrator.initialize()

@@ -70,7 +70,7 @@ jarvis "Hello, what can you do?"
 ## Usage
 
 ```
-usage: jarvis [-h] [--offline] [--model MODEL] [--config PATH] [--api] [--stream] [message]
+usage: jarvis [-h] [--offline] [--model MODEL] [--config PATH] [--api] [--stream] [--voice] [--voice-test] [message]
 
 positional arguments:
   message          Message to send (optional; omit for REPL)
@@ -81,6 +81,8 @@ options:
   --config PATH    Path to jarvis_config.yaml
   --api            Start the FastAPI server
   --stream         Stream the response in CLI mode
+  --voice          Start voice assistant mode
+  --voice-test     Test voice components (STT, TTS, mic)
 ```
 
 ### Examples
@@ -182,15 +184,78 @@ pip install "jarvis-x[memory]"
 
 ---
 
+## Voice System
+
+JARVIS-X includes an optional voice interface — speak to the assistant and hear responses.
+
+### Installation
+
+```bash
+pip install -e ".[voice]"
+# or
+make install-voice
+```
+
+Download the Vosk speech recognition model:
+```bash
+bash scripts/download_vosk_model.sh
+# or manually:
+mkdir -p models && cd models
+wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+unzip vosk-model-small-en-us-0.15.zip
+ln -sf vosk-model-small-en-us-0.15 vosk-model-small-en-us
+```
+
+### Usage
+
+```bash
+# Start voice assistant
+python -m jarvis --voice
+# or
+make voice
+
+# Test voice components
+python -m jarvis --voice-test
+# or
+make voice-test
+```
+
+### Voice API Endpoints
+
+**GET /api/voice/status** — Check voice component availability
+```bash
+curl http://localhost:8000/api/voice/status
+```
+
+**POST /api/voice/transcribe** — Transcribe a WAV file to text
+```bash
+curl -X POST http://localhost:8000/api/voice/transcribe \
+  -F "file=@recording.wav"
+```
+
+**POST /api/voice/speak** — Convert text to speech (returns WAV)
+```bash
+curl -X POST "http://localhost:8000/api/voice/speak?text=Hello+World" \
+  -o speech.wav
+```
+
+**POST /api/voice/chat** — Full voice round-trip: audio → AI response → text
+```bash
+curl -X POST http://localhost:8000/api/voice/chat \
+  -F "file=@question.wav"
+```
+
+---
+
 ## Architecture
 
 ```
 jarvis/
 ├── __init__.py          # Version info
-├── __main__.py          # CLI entry point (--api, --stream flags)
+├── __main__.py          # CLI entry point (--api, --stream, --voice flags)
 ├── api/
 │   ├── __init__.py
-│   └── main.py          # FastAPI app (REST + WebSocket)
+│   └── main.py          # FastAPI app (REST + WebSocket + Voice endpoints)
 ├── core/
 │   ├── config.py        # YAML config loader (JarvisConfig dataclass)
 │   └── orchestrator.py  # Main brain — connects all modules
@@ -201,13 +266,21 @@ jarvis/
 │       ├── groq_provider.py     # Groq API provider
 │       ├── openrouter_provider.py  # OpenRouter provider
 │       └── ollama_provider.py   # Ollama local provider
-└── memory/
-    ├── short_term.py    # Sliding-window conversation memory
-    ├── long_term.py     # ChromaDB vector storage
-    └── memory_manager.py  # Unified memory interface
+├── memory/
+│   ├── short_term.py    # Sliding-window conversation memory
+│   ├── long_term.py     # ChromaDB vector storage
+│   └── memory_manager.py  # Unified memory interface
+└── voice/
+    ├── stt_engine.py    # Speech-to-Text (Vosk, offline)
+    ├── tts_engine.py    # Text-to-Speech (pyttsx3, offline)
+    ├── audio_stream.py  # Microphone capture (sounddevice)
+    └── voice_assistant.py  # Full voice loop (STT → AI → TTS)
 
 config/
 └── jarvis_config.yaml   # Main configuration
+
+scripts/
+└── download_vosk_model.sh  # Helper to download Vosk model
 ```
 
 ### Request pipeline
@@ -277,7 +350,7 @@ make lint
 - [x] Offline LLM support (Ollama integration)
 - [x] Long-term memory with vector search
 - [x] REST API (FastAPI)
-- [ ] Voice input/output
+- [x] Voice input/output
 - [ ] Plugin system
 
 ---
