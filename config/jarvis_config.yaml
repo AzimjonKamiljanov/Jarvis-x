@@ -12,6 +12,8 @@ ai:
 
 memory:
   short_term_limit: 20
+  long_term_enabled: true
+  vector_db_path: "./data/chromadb"
 
 system:
   language: uz  # uz | en
@@ -19,6 +21,7 @@ system:
 
 providers:
   groq:
+    enabled: true
     api_endpoint: https://api.groq.com/openai/v1
     models:
       - name: llama-3.3-70b-versatile
@@ -33,3 +36,12 @@ providers:
         latency_ms: 600
         quality_score: 0.88
         offline_capable: false
+  openrouter:
+    enabled: true
+  ollama:
+    enabled: true
+    base_url: "http://localhost:11434"
+
+api:
+  host: "0.0.0.0"
+  port: 8000

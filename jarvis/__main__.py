@@ -86,6 +86,31 @@ async def _run_single(
     )
 
 
+async def _run_single_stream(
+    orchestrator: JarvisOrchestrator,
+    message: str,
+    session_id: str,
+    force_offline: bool,
+) -> None:
+    """Send a single message and stream the response."""
+    console.print()
+    with console.status("[bold cyan]Streaming…[/bold cyan]", spinner="dots"):
+        chunks: list[str] = []
+        async for chunk in orchestrator.process_stream(
+            user_input=message,
+            session_id=session_id,
+            force_offline=force_offline,
+        ):
+            chunks.append(chunk)
+    console.print(
+        Panel(
+            Text("".join(chunks), style="green"),
+            title="[dim]streamed[/dim]",
+            border_style="green",
+        )
+    )
+
+
 async def _repl(
     orchestrator: JarvisOrchestrator,
     force_offline: bool,
@@ -121,12 +146,28 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--offline", action="store_true", help="Use only offline-capable models")
     parser.add_argument("--model", metavar="MODEL", help="Force a specific model")
     parser.add_argument("--config", metavar="PATH", help="Path to jarvis_config.yaml")
+    parser.add_argument("--api", action="store_true", help="Start the FastAPI server")
+    parser.add_argument("--stream", action="store_true", help="Stream responses in CLI mode")
     return parser
 
 
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
+
+    if args.api:
+        try:
+            import uvicorn  # type: ignore[import]
+        except ImportError:
+            console.print("[red]uvicorn is not installed. Run: pip install uvicorn[standard][/red]")
+            sys.exit(1)
+        uvicorn.run(
+            "jarvis.api.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=False,
+        )
+        return
 
     config = load_config(args.config)
     orchestrator = JarvisOrchestrator(config=config)
@@ -135,13 +176,21 @@ def main() -> None:
         await orchestrator.initialize()
         if args.message:
             session_id = str(uuid.uuid4())
-            await _run_single(
-                orchestrator,
-                args.message,
-                session_id,
-                force_offline=args.offline,
-                force_model=args.model,
-            )
+            if args.stream:
+                await _run_single_stream(
+                    orchestrator,
+                    args.message,
+                    session_id,
+                    force_offline=args.offline,
+                )
+            else:
+                await _run_single(
+                    orchestrator,
+                    args.message,
+                    session_id,
+                    force_offline=args.offline,
+                    force_model=args.model,
+                )
         else:
             await _repl(orchestrator, force_offline=args.offline, force_model=args.model)
 

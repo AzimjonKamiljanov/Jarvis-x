@@ -22,8 +22,9 @@ class ModelConfig:
     offline_capable: bool
 
 
-# Pre-configured registry of available Groq models
+# Pre-configured registry of available models
 _MODEL_REGISTRY: list[ModelConfig] = [
+    # Groq models
     ModelConfig(
         name="llama-3.1-8b-instant",
         provider="groq",
@@ -44,6 +45,50 @@ _MODEL_REGISTRY: list[ModelConfig] = [
         latency_ms=800,
         quality_score=0.95,
         offline_capable=False,
+    ),
+    # OpenRouter models
+    ModelConfig(
+        name="google/gemini-2.0-flash-exp:free",
+        provider="openrouter",
+        latency_ms=400,
+        quality_score=0.85,
+        offline_capable=False,
+    ),
+    ModelConfig(
+        name="meta-llama/llama-3.3-70b-instruct:free",
+        provider="openrouter",
+        latency_ms=500,
+        quality_score=0.90,
+        offline_capable=False,
+    ),
+    ModelConfig(
+        name="deepseek/deepseek-r1:free",
+        provider="openrouter",
+        latency_ms=2000,
+        quality_score=0.93,
+        offline_capable=False,
+    ),
+    # Ollama (local/offline) models
+    ModelConfig(
+        name="phi3:mini",
+        provider="ollama",
+        latency_ms=3000,
+        quality_score=0.65,
+        offline_capable=True,
+    ),
+    ModelConfig(
+        name="mistral:7b",
+        provider="ollama",
+        latency_ms=5000,
+        quality_score=0.75,
+        offline_capable=True,
+    ),
+    ModelConfig(
+        name="qwen2.5:3b",
+        provider="ollama",
+        latency_ms=4000,
+        quality_score=0.60,
+        offline_capable=True,
     ),
 ]
 
@@ -127,12 +172,14 @@ class ModelRouter:
         self,
         user_input: str,
         force_offline: bool = False,
+        available_providers: list[str] | None = None,
     ) -> ModelConfig:
         """Select the best model for the given input.
 
         Args:
             user_input: The user's message.
             force_offline: If True, only consider offline-capable models.
+            available_providers: If given, only consider models from these providers.
 
         Returns:
             The chosen ModelConfig.
@@ -142,6 +189,13 @@ class ModelRouter:
         """
         complexity = self.classify_task(user_input)
         candidates = self._registry
+
+        if available_providers is not None:
+            candidates = [m for m in candidates if m.provider in available_providers]
+            if not candidates:
+                raise RuntimeError(
+                    f"No models available for providers: {available_providers}"
+                )
 
         if force_offline:
             candidates = [m for m in candidates if m.offline_capable]
