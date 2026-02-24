@@ -45,3 +45,13 @@ providers:
 api:
   host: "0.0.0.0"
   port: 8000
+
+voice:
+  stt_engine: "vosk"
+  stt_model_path: "./models/vosk-model-small-en-us"
+  tts_engine: "pyttsx3"
+  tts_rate: 175
+  sample_rate: 16000
+  silence_threshold: 0.01
+  silence_duration: 1.5
+  max_record_duration: 30

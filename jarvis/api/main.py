@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import io
+import tempfile
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -150,3 +152,146 @@ async def ws_chat(websocket: WebSocket) -> None:
                 )
     except WebSocketDisconnect:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Voice endpoints
+# ---------------------------------------------------------------------------
+
+
+class VoiceStatusResponse(BaseModel):
+    stt: bool
+    tts: bool
+    microphone: bool
+
+
+class TranscribeResponse(BaseModel):
+    text: str
+    confidence: float
+
+
+class VoiceChatResponse(BaseModel):
+    user_text: str
+    response: str
+    model_used: str
+    audio_url: str | None = None
+
+
+@app.get("/api/voice/status", response_model=VoiceStatusResponse)
+async def voice_status() -> VoiceStatusResponse:
+    """Return the availability status of voice components."""
+    from jarvis.voice.audio_stream import AudioStream
+    from jarvis.voice.stt_engine import STTEngine
+    from jarvis.voice.tts_engine import TTSEngine
+
+    return VoiceStatusResponse(
+        stt=STTEngine().is_available(),
+        tts=TTSEngine().is_available(),
+        microphone=AudioStream().is_available(),
+    )
+
+
+@app.post("/api/voice/transcribe", response_model=TranscribeResponse)
+async def voice_transcribe(file: UploadFile = File(...)) -> TranscribeResponse:
+    """Transcribe an uploaded WAV file to text using STT."""
+    import os
+
+    from jarvis.voice.stt_engine import STTEngine
+
+    stt = STTEngine()
+    if not stt.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="STT is not available. Install voice dependencies and download the Vosk model.",
+        )
+
+    audio_bytes = await file.read()
+
+    # Write to a temp file so STTEngine can use wave module
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+
+    try:
+        result = stt.transcribe_file(tmp_path)
+    finally:
+        os.unlink(tmp_path)
+
+    return TranscribeResponse(
+        text=str(result.get("text", "")),
+        confidence=float(result.get("confidence", 0.0)),
+    )
+
+
+@app.post("/api/voice/speak")
+async def voice_speak(text: str) -> StreamingResponse:
+    """Convert text to speech and return the WAV audio file."""
+    import os
+
+    from jarvis.voice.tts_engine import TTSEngine
+
+    tts = TTSEngine()
+    if not tts.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="TTS is not available. Install voice dependencies.",
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        tts.save_to_file(text, tmp_path)
+        with open(tmp_path, "rb") as f:
+            audio_bytes = f.read()
+    finally:
+        os.unlink(tmp_path)
+
+    return StreamingResponse(
+        io.BytesIO(audio_bytes),
+        media_type="audio/wav",
+        headers={"Content-Disposition": "attachment; filename=speech.wav"},
+    )
+
+
+@app.post("/api/voice/chat", response_model=VoiceChatResponse)
+async def voice_chat(file: UploadFile = File(...)) -> VoiceChatResponse:
+    """Transcribe uploaded audio, get AI response, and return text (+ spoken audio URL)."""
+    import os
+
+    from jarvis.voice.stt_engine import STTEngine
+
+    stt = STTEngine()
+    if not stt.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="STT is not available. Install voice dependencies and download the Vosk model.",
+        )
+
+    audio_bytes = await file.read()
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+
+    try:
+        stt_result = stt.transcribe_file(tmp_path)
+    finally:
+        os.unlink(tmp_path)
+
+    user_text = str(stt_result.get("text", "")).strip()
+
+    if not user_text:
+        raise HTTPException(status_code=400, detail="Could not transcribe any speech from audio.")
+
+    orchestrator = _get_orchestrator()
+    session_id = str(uuid.uuid4())
+    ai_result = await orchestrator.process_message(
+        user_input=user_text,
+        session_id=session_id,
+    )
+
+    return VoiceChatResponse(
+        user_text=user_text,
+        response=ai_result["response"],
+        model_used=ai_result["model_used"],
+    )
