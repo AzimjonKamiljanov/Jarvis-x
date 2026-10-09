@@ -137,20 +137,43 @@ class JarvisOrchestrator:
             yield str(exc)
             return
 
-        provider = self._providers.get(model_cfg.provider)
-        if provider is None or not provider.is_available():
-            yield "I'm currently unavailable. Please check your API key or internet connection."
-            return
-
         full_response: list[str] = []
-        try:
-            async for chunk in provider.generate_stream(
-                messages=messages, model=model_cfg.name
-            ):
-                full_response.append(chunk)
-                yield chunk
-        except ProviderError as exc:
-            yield str(exc)
+        success = False
+
+        provider = self._providers.get(model_cfg.provider)
+        if provider and provider.is_available():
+            try:
+                async for chunk in provider.generate_stream(
+                    messages=messages, model=model_cfg.name
+                ):
+                    full_response.append(chunk)
+                    yield chunk
+                success = True
+            except ProviderError:
+                full_response.clear()
+
+        if not success:
+            # Fallback
+            fallbacks = self._router.get_models_except(model_cfg.name)
+            for fallback in sorted(fallbacks, key=lambda m: m.latency_ms):
+                if force_offline and not fallback.offline_capable:
+                    continue
+                fb_provider = self._providers.get(fallback.provider)
+                if fb_provider and fb_provider.is_available():
+                    try:
+                        async for chunk in fb_provider.generate_stream(
+                            messages=messages, model=fallback.name
+                        ):
+                            full_response.append(chunk)
+                            yield chunk
+                        success = True
+                        break
+                    except ProviderError:
+                        full_response.clear()
+                        continue
+
+        if not success:
+            yield "I'm currently unavailable. Please check your API key or internet connection."
             return
 
         self._memory.save_interaction(session_id, user_input, "".join(full_response))
