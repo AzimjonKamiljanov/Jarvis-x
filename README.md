@@ -1,359 +1,188 @@
 # 🤖 JARVIS-X
 
-**Next-gen AI assistant — modular, multilingual (EN/UZ), production-ready**
+**An elite cutting-edge AI Voice & Autonomous Automation Assistant**
 
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI/CD](https://github.com/AzimjonKamiljanov/Jarvis-x/actions/workflows/ci.yml/badge.svg)](https://github.com/AzimjonKamiljanov/Jarvis-x/actions)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](#docker)
+
+JARVIS-X is a next-generation AI assistant built with a modular, highly extensible architecture. Designed for speed and autonomy, it features a robust multimodal voice pipeline, smart fallback capabilities, multi-provider routing (Groq, OpenRouter, Ollama), and dynamic memory management.
 
 ---
 
-## Features
+## 🚀 Key Features
 
-- 🚀 **Fast responses** via Groq API (llama-3.3-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768)
-- 🌐 **Multi-provider** — Groq, OpenRouter (Claude, GPT, Gemini, free models), Ollama (local/offline)
-- 🌍 **Multilingual** — fully supports Uzbek 🇺🇿 and English 🇬🇧
-- 🧠 **Smart model routing** — automatically selects the best model based on task complexity and provider availability
-- 💬 **Short-term memory** — sliding-window conversation context per session
-- 🗄️ **Long-term memory** — optional ChromaDB vector storage for semantic search across past interactions
-- ⚡ **Streaming** — real-time token streaming in CLI and API
-- 🌐 **REST API** — FastAPI server with HTTP, Server-Sent Events, and WebSocket endpoints
-- 🎨 **Beautiful terminal UI** — powered by `rich` (ASCII banner, colored output, response time)
-- ⚡ **Async-first** — all I/O operations use `async/await`
-- 🛡️ **Graceful error handling** — fallback providers, rate-limit awareness
-- 🔧 **Configurable** — YAML config file + `.env` for secrets
+*   **⚡ Ultra-Low Latency Voice Pipeline**: Streaming intent classification, text-to-speech, and speech-to-text powered by robust audio buffer management. Responses are spoken as they are generated!
+*   **🌐 Multi-Provider AI Routing**: Intelligent model selection and graceful fallback mechanisms across Groq, OpenRouter, and Ollama.
+*   **🧠 Dynamic Memory Systems**: Short-term sliding-window conversation context, paired with optional ChromaDB vector storage for long-term semantic recall.
+*   **🔌 Modular & Autonomous Architecture**: Strict separation of concerns (audio capture, intent classification, orchestration) makes JARVIS-X incredibly extensible and robust.
+*   **🌍 Multilingual**: Fluent in both English 🇬🇧 and Uzbek 🇺🇿.
+*   **💻 Multichannel Interfaces**: Accessible via a beautiful terminal UI (powered by `rich`), Voice mode, and a full-featured REST/WebSocket API via FastAPI.
 
 ---
 
-## Quick Start
+## 🏗️ System Architecture
 
-### 1. Clone the repository
+JARVIS-X follows a clean, modular architecture, ensuring separation between capture, processing, and execution.
+
+```mermaid
+graph TD
+    User((User)) -->|Voice / Text| Input
+    Input --> IntentParser
+    IntentParser --> |Command| CommandExecutor
+    IntentParser --> |Chat| Orchestrator
+
+    Orchestrator --> MemoryManager[Memory (Short & Long)]
+    Orchestrator --> ModelRouter
+
+    ModelRouter --> Groq
+    ModelRouter --> OpenRouter
+    ModelRouter --> Ollama
+
+    Groq --> Orchestrator
+    OpenRouter --> Orchestrator
+    Ollama --> Orchestrator
+
+    Orchestrator --> |Streaming Chunks| VoiceAssistant
+    VoiceAssistant --> |TTS| Output((Speaker / Terminal))
+```
+
+### Request Pipeline Detail
+
+1.  **Audio Capture (Microphone)**: Captures audio until silence is detected.
+2.  **STT (Speech-to-Text)**: Vosk transcriber converts raw PCM to text.
+3.  **Intent Classification**: Analyzes text to determine if it's a built-in command or a general AI query.
+4.  **Orchestrator & Routing**: Retrieves context from memory and dynamically routes the prompt to the best available model.
+5.  **Streaming AI Generation**: Provider generates responses. If a provider fails, JARVIS-X seamlessly falls back to the next best model.
+6.  **Streaming TTS**: As sentences are generated, the TTS engine converts and speaks them immediately for lowest latency.
+
+---
+
+## 🛠️ Quickstart Guide
+
+### 1. Installation
 
 ```bash
 git clone https://github.com/AzimjonKamiljanov/Jarvis-x.git
 cd Jarvis-x
-```
 
-### 2. Install
-
-```bash
+# Install base dependencies
 pip install -e .
+
+# Install with all bells and whistles (Dev + Voice + Memory)
+pip install -e ".[dev,voice,memory]"
 ```
 
-### 3. Set your API keys
+### 2. Configuration & Secrets
+
+Copy the example environment file and configure your keys.
 
 ```bash
 cp .env.example .env
-# Edit .env and add your API keys
-export GROQ_API_KEY=your_groq_api_key_here
-export OPENROUTER_API_KEY=your_openrouter_api_key_here  # optional
-# For Ollama (local), no key needed — just have Ollama running
 ```
 
-Get a free Groq API key at <https://console.groq.com>.
-Get a free OpenRouter API key at <https://openrouter.ai>.
+Edit `.env` to include your API keys:
 
-### 4. Run
+```env
+GROQ_API_KEY=your_groq_key_here
+OPENROUTER_API_KEY=your_openrouter_key_here
+OLLAMA_BASE_URL=http://localhost:11434
+VOSK_MODEL_PATH=./models/vosk-model-small-en-us
+```
+
+### 3. Audio & Hardware Configuration (Voice Mode)
+
+JARVIS-X requires the Vosk STT model to operate in voice mode. We've provided a helper script:
 
 ```bash
-# Single message
-python -m jarvis "Salom, qanday yordam bera olasiz?"
+bash scripts/download_vosk_model.sh
+```
+
+Ensure your microphone and speakers are correctly configured. You can test your hardware integration using:
+
+```bash
+make voice-test
+# or
+python -m jarvis --voice-test
+```
+
+---
+
+## 💬 Interactive Command Examples
+
+JARVIS-X supports numerous running modes to fit your workflow.
+
+### Voice Mode
+
+Engage the fully autonomous voice pipeline:
+
+```bash
+make voice
+# or
+python -m jarvis --voice
+```
+*(Say "exit", "quit", or "chiqish" to stop the loop)*
+
+### CLI Chat Mode
+
+Interact with JARVIS-X directly from your terminal:
+
+```bash
+# Single Question
+jarvis "What is the capital of France?"
+
+# Streaming Mode
+jarvis --stream "Write a python script for a simple web server."
 
 # Interactive REPL
-python -m jarvis
-
-# Or via the installed script
-jarvis "Hello, what can you do?"
+jarvis
 ```
 
----
+### REST API Server
 
-## Usage
+Launch the FastAPI server to interface via HTTP, SSE, or WebSockets:
 
-```
-usage: jarvis [-h] [--offline] [--model MODEL] [--config PATH] [--api] [--stream] [--voice] [--voice-test] [message]
-
-positional arguments:
-  message          Message to send (optional; omit for REPL)
-
-options:
-  --offline        Use only offline-capable models
-  --model MODEL    Force a specific model
-  --config PATH    Path to jarvis_config.yaml
-  --api            Start the FastAPI server
-  --stream         Stream the response in CLI mode
-  --voice          Start voice assistant mode
-  --voice-test     Test voice components (STT, TTS, mic)
-```
-
-### Examples
-
-```bash
-# Force a specific model
-python -m jarvis --model llama-3.1-8b-instant "Quick question"
-
-# Use a custom config file
-python -m jarvis --config /path/to/my_config.yaml
-
-# Stream response in CLI
-python -m jarvis --stream "Explain async/await in Python"
-
-# Interactive mode with make
-make run
-
-# Start REST API server
-make api
-# or
-python -m jarvis --api
-```
-
----
-
-## Providers
-
-### Groq (default)
-Fast cloud inference. Set `GROQ_API_KEY` in your `.env`.
-Models: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `mixtral-8x7b-32768`
-
-### OpenRouter
-Access to Claude, GPT, Gemini, and many free models. Set `OPENROUTER_API_KEY` in your `.env`.
-Free models: `google/gemini-2.0-flash-exp:free`, `meta-llama/llama-3.3-70b-instruct:free`, `deepseek/deepseek-r1:free`
-
-### Ollama (local/offline)
-Run models locally with [Ollama](https://ollama.ai). No API key required.
-```bash
-# Install Ollama and pull a model
-ollama pull phi3:mini
-# Then use JARVIS-X in offline mode
-python -m jarvis --offline "Hello"
-```
-
----
-
-## REST API
-
-Start the server:
 ```bash
 make api
 # or
-python -m jarvis --api
+jarvis --api
 ```
 
-### Endpoints
+Test the API via cURL:
 
-**POST /api/chat** — Send a message
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "session_id": "my-session"}'
-```
-
-**GET /api/chat/stream** — Server-Sent Events streaming
-```bash
-curl "http://localhost:8000/api/chat/stream?message=Hello&session_id=my-session"
-```
-
-**GET /api/health** — Health check
-```bash
-curl http://localhost:8000/api/health
-```
-
-**GET /api/system/stats** — CPU, RAM, disk usage
-```bash
-curl http://localhost:8000/api/system/stats
-```
-
-**WebSocket /ws/chat** — Real-time chat
-```javascript
-const ws = new WebSocket("ws://localhost:8000/ws/chat");
-ws.send(JSON.stringify({"message": "Hello!", "stream": true}));
+  -d '{"message": "Hello Jarvis!", "session_id": "test-session"}'
 ```
 
 ---
 
-## Memory
+## 🐳 Docker Deployment <a name="docker"></a>
 
-JARVIS-X supports two memory tiers:
+Run JARVIS-X seamlessly via Docker (API mode):
 
-- **Short-term** — sliding-window conversation history per session (always active)
-- **Long-term** — ChromaDB vector storage for semantic search across all past interactions (optional)
-
-To enable long-term memory:
 ```bash
-pip install "jarvis-x[memory]"
+# Build the image
+docker build -t jarvis-x .
+
+# Run the container (Make sure to map your .env)
+docker run -p 8000:8000 --env-file .env jarvis-x
 ```
 
 ---
 
-## Voice System
+## 🔧 Extending & Developing
 
-JARVIS-X includes an optional voice interface — speak to the assistant and hear responses.
+To add new providers, implement the `BaseProvider` interface in `jarvis/ai/providers/`.
+To register new custom commands, extend the logic within `jarvis/core/intent_parser.py`.
 
-### Installation
-
-```bash
-pip install -e ".[voice]"
-# or
-make install-voice
-```
-
-Download the Vosk speech recognition model:
-```bash
-bash scripts/download_vosk_model.sh
-# or manually:
-mkdir -p models && cd models
-wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
-unzip vosk-model-small-en-us-0.15.zip
-ln -sf vosk-model-small-en-us-0.15 vosk-model-small-en-us
-```
-
-### Usage
+Run tests:
 
 ```bash
-# Start voice assistant
-python -m jarvis --voice
-# or
-make voice
-
-# Test voice components
-python -m jarvis --voice-test
-# or
-make voice-test
-```
-
-### Voice API Endpoints
-
-**GET /api/voice/status** — Check voice component availability
-```bash
-curl http://localhost:8000/api/voice/status
-```
-
-**POST /api/voice/transcribe** — Transcribe a WAV file to text
-```bash
-curl -X POST http://localhost:8000/api/voice/transcribe \
-  -F "file=@recording.wav"
-```
-
-**POST /api/voice/speak** — Convert text to speech (returns WAV)
-```bash
-curl -X POST "http://localhost:8000/api/voice/speak?text=Hello+World" \
-  -o speech.wav
-```
-
-**POST /api/voice/chat** — Full voice round-trip: audio → AI response → text
-```bash
-curl -X POST http://localhost:8000/api/voice/chat \
-  -F "file=@question.wav"
-```
-
----
-
-## Architecture
-
-```
-jarvis/
-├── __init__.py          # Version info
-├── __main__.py          # CLI entry point (--api, --stream, --voice flags)
-├── api/
-│   ├── __init__.py
-│   └── main.py          # FastAPI app (REST + WebSocket + Voice endpoints)
-├── core/
-│   ├── config.py        # YAML config loader (JarvisConfig dataclass)
-│   └── orchestrator.py  # Main brain — connects all modules
-├── ai/
-│   ├── model_router.py  # Smart model selection (TaskComplexity enum)
-│   └── providers/
-│       ├── base.py              # Abstract BaseProvider + ProviderError
-│       ├── groq_provider.py     # Groq API provider
-│       ├── openrouter_provider.py  # OpenRouter provider
-│       └── ollama_provider.py   # Ollama local provider
-├── memory/
-│   ├── short_term.py    # Sliding-window conversation memory
-│   ├── long_term.py     # ChromaDB vector storage
-│   └── memory_manager.py  # Unified memory interface
-└── voice/
-    ├── stt_engine.py    # Speech-to-Text (Vosk, offline)
-    ├── tts_engine.py    # Text-to-Speech (pyttsx3, offline)
-    ├── audio_stream.py  # Microphone capture (sounddevice)
-    └── voice_assistant.py  # Full voice loop (STT → AI → TTS)
-
-config/
-└── jarvis_config.yaml   # Main configuration
-
-scripts/
-└── download_vosk_model.sh  # Helper to download Vosk model
-```
-
-### Request pipeline
-
-```
-User input
-    │
-    ▼
-ShortTermMemory.add()          ← save user message
-    │
-    ▼
-ModelRouter.classify_task()    ← heuristic complexity detection
-    │
-    ▼
-ModelRouter.select_model()     ← pick fastest / highest-quality model
-    │
-    ▼
-GroqProvider.generate()        ← async API call (with fallback)
-    │
-    ▼
-ShortTermMemory.add()          ← save assistant response
-    │
-    ▼
-Return {response, model_used, response_time}
-```
-
----
-
-## Configuration
-
-Edit `config/jarvis_config.yaml`:
-
-```yaml
-ai:
-  default_provider: groq
-  temperature: 0.7
-  max_tokens: 2048
-
-memory:
-  short_term_limit: 20   # sliding window size
-
-system:
-  language: uz           # uz | en
-  debug: false
-```
-
----
-
-## Development
-
-```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
 make test
-
-# Lint
-make lint
 ```
-
----
-
-## Roadmap
-
-- [x] Streaming responses in the terminal
-- [x] Offline LLM support (Ollama integration)
-- [x] Long-term memory with vector search
-- [x] REST API (FastAPI)
-- [x] Voice input/output
-- [ ] Plugin system
-
----
 
 ## License
 
